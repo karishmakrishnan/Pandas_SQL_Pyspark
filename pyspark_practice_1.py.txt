@@ -1,0 +1,41 @@
+from pyspark.sql.functions import to_timestamp
+import pyspark.sql.functions as f
+from pyspark.sql.window import Window
+
+data = [
+    (101, 1, "DEBIT", 500, "2024-01-01 10:15:00"),
+    (101, 2, "CREDIT", 1000, "2024-01-01 12:30:00"),
+    (101, 3, "DEBIT", 300, "2024-01-01 15:00:00"),
+    (102, 4, "CREDIT", 700, "2024-01-01 09:00:00"),
+    (102, 5, "DEBIT", 900, "2024-01-01 11:00:00"),
+    (101, 6, "DEBIT", 200, "2024-01-02 10:00:00"),
+    (101, 7, "CREDIT", 500, "2024-01-02 14:00:00"),
+    (103, 8, "DEBIT", 1500, "2024-01-02 16:00:00"),
+    (103, 9, "CREDIT", 200, "2024-01-02 18:00:00"),
+]
+
+columns = ["customer_id", "txn_id", "txn_type", "amount", "txn_timestamp"]
+df = spark.createDataFrame(data, columns)\
+    .withColumn("txn_timestamp", to_timestamp("txn_timestamp"))
+df_txn = df.withColumn("txn_date", f.to_date("txn_timestamp"))
+window = Window.partitionBy("txn_date")
+df_txn_debit = df_txn.withColumn("total_debit", f.sum("amount").over(window))\
+         .filter(df_txn.txn_type == "DEBIT")
+df_txn_credit = df_txn.withColumn("total_credit", f.sum("amount").over(window))\
+         .filter(df_txn.txn_type == "CREDIT")
+rn_window = Window.partitionBy("customer_id").orderBy(f.col("total_debit"))
+df_txn_debit_filter = df_txn_debit.withColumn("rn", f.row_number().over(rn_window))\
+                    .filter(f.col("rn") == 1)\
+                    .drop("rn")
+df_txn_credit_filter = df_txn_credit.withColumn("rn", f.row_number().over(rn_window))\
+                    .filter(f.col("rn") == 1)\
+                    .drop("rn")
+
+df_merge = df_txn_debit.join(df_txn_credit, on = ["customer_id","txn_date"], how = "cross")
+#             .withColumn("difference", f.col("df_txn_debit.amount") - f.col("df_txn_credit.amount"))
+df_merge.show()
+df_txn_debit_filter.show()
+# df_txn_credit_filter.show()
+df_txn.show()
+df_txn_debit.show()
+df_txn_credit.show()

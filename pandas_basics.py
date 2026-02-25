@@ -1,6 +1,6 @@
+
 import pandas as pd
 
-# two table merging
 def combine_two_tables(person: pd.DataFrame, address: pd.DataFrame) -> pd.DataFrame:
     # output = pd.DataFrame()
     # print(person)
